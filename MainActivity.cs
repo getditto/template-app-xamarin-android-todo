@@ -53,6 +53,10 @@ namespace DittoXamarinAndroidTasksApp
             var workingDir = $"{Xamarin.Essentials.FileSystem.AppDataDirectory}/ditto";
             this.ditto = new Ditto(DittoIdentity.OnlinePlayground("<ADD_YOUR_APP_ID>", "<ADD_YOUR_TOKEN>", true), workingDir);
 
+            // With 4.5.0-alpha2 this needs to be manually disabled, othrwise the app will crash.
+            // This will be resolved with a later release. 
+            ditto.TransportConfig.PeerToPeer.BluetoothLE.Enabled = false;
+
             // This starts Ditto's background synchronization
             try
             {
