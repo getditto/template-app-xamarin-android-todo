@@ -1,0 +1,23 @@
+﻿<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme. -->
+    <style name="Theme.DittoXamarinAndroidTasksApp" parent="Theme.MaterialComponents.Light.DarkActionBar">
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor" tools:targetApi="l">@color/purple_700</item>
+        <!-- Customize your theme here. -->
+
+        <!-- no action bar -->
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.DittoXamarinAndroidTasksApp.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.DittoXamarinAndroidTasksApp.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
+
+    <style name="Theme.DittoXamarinAndroidTasksApp.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
+</resources>
+
