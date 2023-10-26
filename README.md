@@ -1,5 +1,8 @@
 # Template App - Xamarin Android
 
+> [!NOTE]  
+> For Xamarin.iOS, check this repo out: https://github.com/getditto/template-app-xamarin-ios-todo
+
 Converted the [Kotlin tutorial](https://docs.ditto.live/kotlin-task-app-quickstart) to Xamarin.Android.
 
 ### Before you build
