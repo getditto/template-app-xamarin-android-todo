@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.Graphics;
@@ -13,6 +15,7 @@ using AndroidX.Core.Content;
 using AndroidX.RecyclerView.Widget;
 using DittoSDK;
 using Java.Lang;
+using Newtonsoft.Json;
 using static AndroidX.RecyclerView.Widget.RecyclerView;
 #pragma warning disable CS0618 // Type or member is obsolete
 
@@ -26,9 +29,6 @@ namespace DittoXamarinAndroidTasksApp
         private TasksAdapter viewAdapter;
 
         private Ditto ditto;
-        private DittoCollection collection;
-        private DittoLiveQuery liveQuery;
-        private DittoSubscription subscription;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -49,6 +49,34 @@ namespace DittoXamarinAndroidTasksApp
             recyclerView.SetAdapter(viewAdapter);
             recyclerView.AddItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.Vertical));
 
+            SetupDitto();
+
+            // Add swipe to delete
+            MySwipeToDelete swipeHandler = new MySwipeToDelete(this, BaseContext!);
+ 
+            // Configure the RecyclerView for swipe to delete
+            ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeHandler);
+            itemTouchHelper.AttachToRecyclerView(recyclerView);
+
+            //Respond to new task button click
+            FindViewById(Resource.Id.addTaskButton).Click += (s, e) =>
+            {
+                ShowNewTaskUI();
+            };
+
+            tasksAdapter.OnItemClick += (s, e) =>
+            {
+                var updateQuery = $"UPDATE {DittoTask.CollectionName} " +
+                    $"SET isCompleted = {!e.DittoTask.IsCompleted} " +
+                    $"WHERE _id = '{e.DittoTask.Id}'";
+                ditto.Store.ExecuteAsync(updateQuery);
+            };
+
+            SetupTaskList();
+        }
+
+        private void SetupDitto()
+        {
             // Create an instance of Ditto
             var workingDir = $"{Xamarin.Essentials.FileSystem.AppDataDirectory}/ditto";
             this.ditto = new Ditto(DittoIdentity.OnlinePlayground("<ADD_YOUR_APP_ID>", "<ADD_YOUR_TOKEN>", true), workingDir);
@@ -66,77 +94,29 @@ namespace DittoXamarinAndroidTasksApp
             {
                 System.Diagnostics.Debug.WriteLine(e.StackTrace);
             }
-
-            // We will create a long-running live query to keep the database up-to-date
-            this.collection = this.ditto.Store.Collection("tasks");
-            this.subscription = this.collection.Find("!isDeleted").Subscribe();
-
-            // Add swipe to delete
-            MySwipeToDelete swipeHandler = new MySwipeToDelete(this, BaseContext!);
- 
-
-            // Configure the RecyclerView for swipe to delete
-            ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeHandler);
-            itemTouchHelper.AttachToRecyclerView(recyclerView);
-
-            //Respond to new task button click
-            FindViewById(Resource.Id.addTaskButton).Click += (s, e) =>
-            {
-                ShowNewTaskUI();
-            };
-
-
-            tasksAdapter.OnItemClick += (s, e) =>
-            {
-                ditto.Store.Collection("tasks").FindById(e.DittoDocument.Id).Update((dittoMutableDocument) =>
-                {
-                    try
-                    {
-                        dittoMutableDocument["isCompleted"].Set(!dittoMutableDocument["isCompleted"].BooleanValue);
-                    }
-                    catch (DittoException e)
-                    {
-                        System.Diagnostics.Debug.WriteLine(e.StackTrace);
-                    }
-                });
-            };
-
-            // This function will create a "live-query" that will update
-            // our RecyclerView
-            SetupTaskList();
         }
 
         void SetupTaskList()
         {
-            // We use observeLocal to create a live query with a subscription to sync this query with other devices
-            this.liveQuery = collection.Find("!isDeleted").ObserveLocal(OnObserveLocalHandler);
+            var query = $"SELECT * FROM {DittoTask.CollectionName} WHERE isDeleted = false";
 
-            ditto.Store.Collection("tasks").Find("isDeleted == true").Evict();
-        }
-
-
-        public void OnObserveLocalHandler(IList<DittoDocument> docs, DittoLiveQueryEvent e)
-        {
-            TasksAdapter adapter = this.viewAdapter;
-            if (e is DittoLiveQueryEvent.Update updateEvent)
+            ditto.Sync.RegisterSubscription(query);
+            ditto.Store.RegisterObserver(query, storeObservationHandler: async (queryResult) =>
             {
                 RunOnUiThread(() =>
                 {
-                    adapter.SetTasks(docs);
-                    adapter.Inserts(updateEvent.Insertions.Cast<int>().ToList());
-                    adapter.Deletes(updateEvent.Deletions.Cast<int>().ToList());
-                    adapter.Updates(updateEvent.Updates.Cast<int>().ToList());
-                    adapter.Moves(updateEvent.Moves.Cast<DittoLiveQueryMove>().ToList());
-                });
-            }
-            else if (e is DittoLiveQueryEvent.Initial)
-            {
-                RunOnUiThread(() =>
-                {
-                    adapter.SetInitial(docs);
-                });
-            }
+                    var adapter = this.viewAdapter;
+
+                    adapter.SetTasks(queryResult.Items.ConvertAll(d =>
+                    {
+                        return JsonConvert.DeserializeObject<DittoTask>(d.JsonString());
+                    }));
+                }); 
+            });
+
+            ditto.Store.ExecuteAsync($"EVICT FROM {DittoTask.CollectionName} WHERE isDeleted = false");
         }
+
 
         void ShowNewTaskUI()
         {
@@ -152,13 +132,15 @@ namespace DittoXamarinAndroidTasksApp
                 { "isCompleted", false },
                 { "isDeleted", false }
             };
-            collection.Upsert(map);
+            ditto.Store.ExecuteAsync($"INSERT INTO {DittoTask.CollectionName} DOCUMENTS (:doc1)", new Dictionary<string, object>()
+            {
+                { "doc1", map }
+            });
         }
 
         public void OnDialogCancel(DialogFragment dialog)
         {
         }
-
 
         public class MySwipeToDelete : SwipeToDeleteCallback
         {
@@ -172,19 +154,12 @@ namespace DittoXamarinAndroidTasksApp
             {
                 TasksAdapter adapter = (TasksAdapter)mainActivity1.recyclerView.GetAdapter();
                 // Retrieve the task at the row swiped
-                DittoDocument task = adapter.GetTasks().ElementAt(viewHolder.AdapterPosition);
+                DittoTask task = adapter.GetTasks().ElementAt(viewHolder.AdapterPosition);
                 // Delete the task from Ditto
-                mainActivity1.ditto.Store.Collection("tasks").FindById(task.Id).Update(doc =>
-                {
-                    try
-                    {
-                        doc["isDeleted"].Set(true);
-                    }
-                    catch (DittoException e)
-                    {
-                        System.Diagnostics.Debug.WriteLine(e.StackTrace);
-                    }
-                });
+                var updateQuery = $"UPDATE {DittoTask.CollectionName} " +
+                    "SET isDeleted = true " +
+                    $"WHERE _id = '{task.Id}'";
+                mainActivity1.ditto.Store.ExecuteAsync(updateQuery);
             }
         }
 
