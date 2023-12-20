@@ -17,6 +17,17 @@ namespace DittoXamarinAndroidTasksApp
 
         [JsonProperty("isCompleted")]
         public bool IsCompleted { get; set;}
+
+        public override bool Equals(object obj)
+        {
+            if (obj is DittoTask other)
+            {
+                return Id == other.Id &&
+                    Body == other.Body &&
+                    IsCompleted == other.IsCompleted;
+            }
+            return false;
+        }
     }
 }
 

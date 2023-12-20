@@ -64,13 +64,38 @@ namespace DittoXamarinAndroidTasksApp
             return tasks;
         }
 
-        public int SetTasks(IList<DittoTask> newTasks)
+        public void SetTasks(IList<DittoTask> newTasks)
         {
-            this.tasks.Clear();
-            this.tasks.AddRange(newTasks);
-            this.NotifyDataSetChanged();
+            var diffResult = DiffUtil.CalculateDiff(new TasksDiffCallback(tasks, newTasks));
+            tasks.Clear();
+            tasks.AddRange(newTasks);
+            diffResult.DispatchUpdatesTo(this);
+        }
 
-            return tasks.Count;
+        private class TasksDiffCallback : DiffUtil.Callback
+        {
+            private readonly IList<DittoTask> oldTasks;
+            private readonly IList<DittoTask> newTasks;
+
+            public TasksDiffCallback(IList<DittoTask> oldTasks, IList<DittoTask> newTasks)
+            {
+                this.oldTasks = oldTasks;
+                this.newTasks = newTasks;
+            }
+
+            public override int OldListSize => oldTasks.Count;
+
+            public override int NewListSize => newTasks.Count;
+
+            public override bool AreContentsTheSame(int oldItemPosition, int newItemPosition)
+            {
+                return oldTasks[oldItemPosition].Equals(newTasks[newItemPosition]);
+            }
+
+            public override bool AreItemsTheSame(int oldItemPosition, int newItemPosition)
+            {
+                return oldTasks[oldItemPosition].Id == newTasks[newItemPosition].Id;
+            }
         }
     }
 }
