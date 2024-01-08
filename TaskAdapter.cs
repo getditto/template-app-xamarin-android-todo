@@ -4,14 +4,12 @@ using System.Linq;
 using Android.Views;
 using Android.Widget;
 using AndroidX.RecyclerView.Widget;
-using DittoSDK;
-using Java.Lang;
 
 namespace DittoXamarinAndroidTasksApp
 {
     public class TasksAdapterItemClickEventArgs : EventArgs
     {
-        public DittoDocument DittoDocument { get; set; }
+        public DittoTask DittoTask { get; set; }
     }
 
     public class MyViewHolder : RecyclerView.ViewHolder
@@ -23,7 +21,7 @@ namespace DittoXamarinAndroidTasksApp
 
     public class TasksAdapter : RecyclerView.Adapter
     {
-        private List<DittoDocument> tasks = new List<DittoDocument>();
+        private List<DittoTask> tasks = new List<DittoTask>();
 
         public event EventHandler<TasksAdapterItemClickEventArgs> OnItemClick;
 
@@ -41,9 +39,9 @@ namespace DittoXamarinAndroidTasksApp
 
         public override void OnBindViewHolder(RecyclerView.ViewHolder holder, int position)
         {
-            DittoDocument task = tasks.ElementAt(position);
-            ((TextView)holder.ItemView.FindViewById(Resource.Id.taskTextView)).Text = task["body"].StringValue;
-            ((CheckBox)holder.ItemView.FindViewById(Resource.Id.taskCheckBox)).Checked = task["isCompleted"].BooleanValue;
+            DittoTask task = tasks.ElementAt(position);
+            ((TextView)holder.ItemView.FindViewById(Resource.Id.taskTextView)).Text = task.Body;
+            ((CheckBox)holder.ItemView.FindViewById(Resource.Id.taskCheckBox)).Checked = task.IsCompleted;
 
             holder.ItemView.Click += ItemClickHandler;
 
@@ -51,7 +49,7 @@ namespace DittoXamarinAndroidTasksApp
             {
                 OnItemClick?.Invoke(this, new TasksAdapterItemClickEventArgs()
                 {
-                    DittoDocument = tasks.ElementAt(holder.AdapterPosition)
+                    DittoTask = tasks.ElementAt(holder.AdapterPosition)
                 });
                 holder.ItemView.Click -= ItemClickHandler;
             }
@@ -61,59 +59,43 @@ namespace DittoXamarinAndroidTasksApp
 
         public override int ItemCount => tasks.Count;
 
-        public List<DittoDocument> GetTasks()
+        public List<DittoTask> GetTasks()
         {
             return tasks;
         }
 
-        public int SetTasks(IList<DittoDocument> newTasks)
+        public void SetTasks(IList<DittoTask> newTasks)
         {
-            this.tasks.Clear();
-            this.tasks.AddRange(newTasks);
-            return tasks.Count;
+            var diffResult = DiffUtil.CalculateDiff(new TasksDiffCallback(tasks, newTasks));
+            tasks.Clear();
+            tasks.AddRange(newTasks);
+            diffResult.DispatchUpdatesTo(this);
         }
 
-        public int Inserts(IList<int> indexes)
+        private class TasksDiffCallback : DiffUtil.Callback
         {
-            foreach (int index in indexes)
+            private readonly IList<DittoTask> oldTasks;
+            private readonly IList<DittoTask> newTasks;
+
+            public TasksDiffCallback(IList<DittoTask> oldTasks, IList<DittoTask> newTasks)
             {
-                this.NotifyItemRangeInserted(index, 1);
+                this.oldTasks = oldTasks;
+                this.newTasks = newTasks;
             }
-            return tasks.Count;
-        }
 
-        public int Deletes(IList<int> indexes)
-        {
-            foreach (int index in indexes)
+            public override int OldListSize => oldTasks.Count;
+
+            public override int NewListSize => newTasks.Count;
+
+            public override bool AreContentsTheSame(int oldItemPosition, int newItemPosition)
             {
-                this.NotifyItemRangeRemoved(index, 1);
+                return oldTasks[oldItemPosition].Equals(newTasks[newItemPosition]);
             }
-            return this.tasks.Count;
-        }
 
-        public int Updates(IList<int> indexes)
-        {
-            foreach (int index in indexes)
+            public override bool AreItemsTheSame(int oldItemPosition, int newItemPosition)
             {
-                this.NotifyItemRangeChanged(index, 1);
+                return oldTasks[oldItemPosition].Id == newTasks[newItemPosition].Id;
             }
-            return this.tasks.Count;
-        }
-
-        public void Moves(IList<DittoLiveQueryMove> moves)
-        {
-            foreach (DittoLiveQueryMove move in moves)
-            {
-                this.NotifyItemMoved(move.From, move.To);
-            }
-        }
-
-        public int SetInitial(IList<DittoDocument> initialTasks)
-        {
-            this.tasks.AddRange(initialTasks);
-            this.NotifyDataSetChanged();
-            return this.tasks.Count;
         }
     }
 }
-
